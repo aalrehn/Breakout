@@ -1,0 +1,143 @@
+#property strict
+
+datetime lastCheck = 0;
+input int RSI_Period = 14;
+input int LookbackBars = 20;
+datetime lastBreakoutTime = 0;
+
+void OnTick()
+{
+   if (Time[1] == lastCheck) return;
+   lastCheck = Time[1];
+
+   for (int i = 30; i >= 10; i--)
+   {
+      CheckBreakoutAtCandle(i);
+      
+      // Bearish Engulfing Detection with stricter logic
+      if (IsBearishEngulfing(i))
+      {
+         double engulfHigh = High[i];
+
+         // Look ahead 20 candles for invalidation (close above high)
+         for (int j = i - 1; j >= i - 20 && j > 0; j--)
+         {
+            if (Close[j] > engulfHigh)
+            {
+               string name = "EngulfInvalid_" + TimeToStr(Time[j], TIME_SECONDS);
+               DrawBlackLine(name, Time[j]);
+               Alert("Bearish Engulfing Invalidated at ", Symbol(), " on ", TimeToStr(Time[j]));
+               break;
+            }
+         }
+      }
+
+      // Bullish Engulfing with RSI Divergence using stricter logic
+      if (IsBullishEngulfing(i) && HasBullishRSIDivergence(i))
+      {
+         string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
+         DrawBlackLine(name, Time[i]);
+         Alert("Bullish Engulfing with RSI Divergence at ", Symbol(), " on ", TimeToStr(Time[i]));
+      }
+   }
+}
+
+void CheckBreakoutAtCandle(int i)
+{
+   if (Bars < LookbackBars + 31)
+      return;
+
+   for (int i = 2; i <= 31; i++)
+   {
+      double lowestLow = Low[i];
+      for (int j = i; j < i + LookbackBars && j < Bars; j++)
+      {
+         if (Low[j] < lowestLow){
+            lowestLow = Low[j];
+            }
+      }
+
+      if (Low[i - 1] < lowestLow && Close[i] > High[i - 1])
+      {
+         string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
+         DrawBlackLine(name, Time[i]);
+         Alert("Bullish Engulfing with RSI Divergence at ", Symbol(), " on ", TimeToStr(Time[i]));
+      
+   }
+   }
+}
+
+//-----------------------
+// Pattern Detection
+//-----------------------
+
+bool IsBearishEngulfing(int i)
+{
+   if (i + 1 >= Bars) return false;
+
+   return (
+      Close[i] < Open[i] &&                       // current candle is bearish
+      Close[i + 1] > Open[i + 1] &&               // previous candle is bullish
+      High[i] >= High[i + 1] + Point * 2 &&       // high fully engulfs
+      Low[i] <= Low[i + 1] - Point * 2 &&         // low fully engulfs
+      Close[i] < Low[i + 1] - Point * 2           // closes below prior candle's low
+   );
+}
+
+bool IsBullishEngulfing(int i)
+{
+   if (i + 1 >= Bars) return false;
+
+   return (
+      Close[i] > Open[i] &&                       // current candle is bullish
+      Close[i + 1] < Open[i + 1] &&               // previous candle is bearish
+      Low[i] <= Low[i + 1] - Point * 2 &&         // low fully engulfs
+      High[i] >= High[i + 1] + Point * 2 &&       // high fully engulfs
+      Close[i] > High[i + 1] + Point * 2          // closes above prior candle's high
+   );
+}
+
+bool HasBullishRSIDivergence(int i)
+{
+   if (i + 5 >= Bars) return false;
+
+   double currentLow = Low[i];
+   double prevLow = Low[i + 5];
+
+   double rsiCurrent = iRSI(NULL, 0, RSI_Period, PRICE_CLOSE, i);
+   double rsiPrev = iRSI(NULL, 0, RSI_Period, PRICE_CLOSE, i + 5);
+
+   return (
+      currentLow < prevLow - Point * 2 &&   
+      rsiCurrent > rsiPrev + 0.1            
+   );
+}
+
+//-----------------------
+// Draw Helper
+//-----------------------
+
+void DrawBlackLine(string name, datetime time)
+{
+   DeleteAllLines();
+   if (ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_VLINE, 0, time, 0);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrBlack);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
+   }
+}
+
+void DeleteAllLines()
+{
+   for(int i = ObjectsTotal() - 1; i >= 0; i--)
+   {
+      string objName = ObjectName(i);
+      if(StringFind(objName, "EngulfInvalid_") >= 0 || 
+         StringFind(objName, "BullishRSIEngulf_") >= 0 ||
+         StringFind(objName, "Breakout_") >= 0)  // Added this line
+      {
+         ObjectDelete(0, objName);
+      }
+   }
+}
