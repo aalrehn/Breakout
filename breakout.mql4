@@ -13,7 +13,7 @@ input int    MaxBreakoutScanBars  = 100;
 input bool   EnableAlerts         = true;
 input color  BreakoutLineColor    = Lime; 
 input color  EngulfLineColor      = Black; 
-
+input color LineColor = Lime;
 int onInit(){
    ArrayResize(alerts, 0);
    return(INIT_SUCCEEDED);
@@ -115,9 +115,11 @@ void checkBreakouts()
             if (EnableAlerts)
                Alert(msg);
             Print(msg);
-
-            string lineName = "BreakoutSupport_" + TimeToStr(rejectTime, TIME_SECONDS);
-                DrawBlackLine(lineName, Time[i]);
+            string lineName = "PatternLine_" + TimeToString(Time[i], TIME_MINUTES | TIME_SECONDS);
+            ObjectCreate(0, lineName, OBJ_HLINE, 0, 0, priorSupport);
+            ObjectSetInteger(0, lineName, OBJPROP_COLOR, LineColor);
+            ObjectSetInteger(0, lineName, OBJPROP_WIDTH, 2);
+            ObjectSetInteger(0, lineName, OBJPROP_STYLE, STYLE_SOLID);
 
             AddAlert(rejectTime);
          }
