@@ -1,9 +1,10 @@
+//+------------------------------------------------------------------+
+//| Engulfing EA with RSI Divergence + Invalidation                  |
+//+------------------------------------------------------------------+
 #property strict
 
 datetime lastCheck = 0;
 input int RSI_Period = 14;
-input int LookbackBars = 20;
-datetime lastBreakoutTime = 0;
 
 void OnTick()
 {
@@ -12,8 +13,7 @@ void OnTick()
 
    for (int i = 30; i >= 10; i--)
    {
-      CheckBreakoutAtCandle(i);
-      
+   checkBreakouts(i);
       // Bearish Engulfing Detection with stricter logic
       if (IsBearishEngulfing(i))
       {
@@ -42,31 +42,30 @@ void OnTick()
    }
 }
 
-void CheckBreakoutAtCandle(int i)
-{
-   if (Bars < LookbackBars + 31)
-      return;
 
-   for (int i = 2; i <= 31; i++)
-   {
-      double lowestLow = Low[i];
-      for (int j = i; j < i + LookbackBars && j < Bars; j++)
-      {
-         if (Low[j] < lowestLow){
-            lowestLow = Low[j];
-            }
-      }
+void checkBreakouts(int i) {
+    int maxLookback = 120; 
+    int minLookback = 5;  
+    
 
-      if (Low[i - 1] < lowestLow && Close[i] > High[i - 1])
-      {
-         string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
-         DrawBlackLine(name, Time[i]);
-         Alert("Bullish Engulfing with RSI Divergence at ", Symbol(), " on ", TimeToStr(Time[i]));
-      
-   }
-   }
+    for (int lookbackBars = minLookback; lookbackBars <= maxLookback; lookbackBars++) {
+        
+
+        double lowestLow = Low[i + 1];
+        for (int j = i + 1; j <= i + lookbackBars && j < Bars; j++) {
+            if (Low[j] < lowestLow)
+                lowestLow = Low[j];
+        }
+        
+
+        if (Low[i] < lowestLow && Close[i] > High[i + 1]) {
+            string name = "Breakout_" + TimeToStr(Time[i], TIME_SECONDS);
+            DrawBlackLine(name, Time[i]);
+            Alert("Breakout at ", Symbol(), " on ", TimeToStr(Time[i]));
+            break;
+        }
+    }
 }
-
 //-----------------------
 // Pattern Detection
 //-----------------------
@@ -119,7 +118,7 @@ bool HasBullishRSIDivergence(int i)
 
 void DrawBlackLine(string name, datetime time)
 {
-   DeleteAllLines();
+      DeleteAllLines();
    if (ObjectFind(0, name) < 0)
    {
       ObjectCreate(0, name, OBJ_VLINE, 0, time, 0);
@@ -128,14 +127,15 @@ void DrawBlackLine(string name, datetime time)
    }
 }
 
+
 void DeleteAllLines()
 {
+
    for(int i = ObjectsTotal() - 1; i >= 0; i--)
    {
       string objName = ObjectName(i);
       if(StringFind(objName, "EngulfInvalid_") >= 0 || 
-         StringFind(objName, "BullishRSIEngulf_") >= 0 ||
-         StringFind(objName, "Breakout_") >= 0)  // Added this line
+         StringFind(objName, "BullishRSIEngulf_") >= 0)
       {
          ObjectDelete(0, objName);
       }
