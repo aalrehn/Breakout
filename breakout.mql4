@@ -42,6 +42,7 @@ void OnTick()
                string name = "EngulfInvalid_" + TimeToStr(Time[j], TIME_SECONDS);
                DrawBlackLine(name, Time[j]);
                Alert("Bearish Engulfing Invalidated at ", Symbol(), " on ", TimeToStr(Time[j]));
+                      SendNotification("Bearish Engulfing Invalidated at " +  Symbol() +  " on " +  TimeToStr(Time[j]));
                AddAlert(Time[j]); 
                break;
                }
@@ -56,6 +57,7 @@ void OnTick()
          string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
          DrawBlackLine(name, Time[i]);
          Alert("Bullish Engulfing with RSI Divergence at ", Symbol(), " on ", TimeToStr(Time[i]));
+            SendNotification("Bullish Engulfing with RSI Divergence at " +  Symbol() +  " on " +  TimeToStr(Time[i]));
                         AddAlert(Time[i]); 
          }
       }
@@ -126,9 +128,11 @@ void checkBreakouts()
 
             string rejectLine = "BreakoutReject_" + TimeToStr(rejectTime, TIME_SECONDS);
             ObjectCreate(0, rejectLine, OBJ_HLINE, 0, 0, Close[i - 1]);
-            ObjectSetInteger(0, rejectLine, OBJPROP_COLOR, Red);
+            ObjectSetInteger(0, rejectLine, OBJPROP_COLOR, Green);
             ObjectSetInteger(0, rejectLine, OBJPROP_WIDTH, 2);
             ObjectSetInteger(0, rejectLine, OBJPROP_STYLE, STYLE_DASH);
+            
+            SendNotification(rejectLine);
 
             AddAlert(rejectTime);
          }
