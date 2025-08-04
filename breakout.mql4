@@ -20,10 +20,10 @@ int onInit(){
 }
 void OnTick()
 {
-    checkBreakouts();
+    
    if (Time[1] == lastCheck) return;
    lastCheck = Time[1];
-  
+  checkBreakouts();
    for (int i = 30; i >= 10; i--)
    {
    
