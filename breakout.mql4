@@ -9,6 +9,7 @@ datetime alerts[];
 
 input int    LookbackBars         = 50;   
 input int    MaxBreakoutScanBars  = 100;  
+input int    MaxSupportLookback   = 50;  
 
 input bool   EnableAlerts         = true;
 input color  BreakoutLineColor    = Lime; 
@@ -94,41 +95,44 @@ void AddAlert(datetime time)
 void checkBreakouts()
 {
 
-   for (int i = 1; i < Bars; i++)
+   for (int i = 2; i < Bars; i++)
    {
-      if (i + 1 >= Bars) 
+      if (i + 1 >= Bars)
          continue;
-      
+
+
+      int lastSupportBar = MathMin(i + MaxSupportLookback, Bars - 1);
       double priorSupport = Low[i + 1];
-      for (int j = i + 1; j < Bars; j++)
+      for (int j = i + 1; j <= lastSupportBar; j++)
       {
          if (Low[j] < priorSupport)
             priorSupport = Low[j];
       }
-      // horizontal on close
-      
+
 
       if (Low[i] < priorSupport && Close[i - 1] > High[i])
       {
          datetime rejectTime = Time[i - 1];
          if (!IsAlertSent(rejectTime))
          {
-            string msg = "Breakout" + Symbol() + " at " + TimeToStr(rejectTime, TIME_DATE | TIME_MINUTES);
+            string msg = "Breakout (breakdown+rejection) on " + Symbol() + " at " +
+                         TimeToStr(rejectTime, TIME_DATE | TIME_MINUTES);
             if (EnableAlerts)
                Alert(msg);
-            Print(msg);
-            ClearPreviousBreakoutLines();
-            string lineName = "PatternLine_" + TimeToString(Time[i], TIME_MINUTES | TIME_SECONDS);
-            ObjectCreate(0, lineName, OBJ_HLINE, 0, 0, Close[i-1]);
-            ObjectSetInteger(0, lineName, OBJPROP_COLOR, Red);
-            ObjectSetInteger(0, lineName, OBJPROP_WIDTH, 2);
-            ObjectSetInteger(0, lineName, OBJPROP_STYLE, STYLE_SOLID);
-            
+            Print(msg + " priorSupport=" + DoubleToStr(priorSupport, Digits));
 
+
+            ClearPreviousBreakoutLines();
+
+            string rejectLine = "BreakoutReject_" + TimeToStr(rejectTime, TIME_SECONDS);
+            ObjectCreate(0, rejectLine, OBJ_HLINE, 0, 0, Close[i - 1]);
+            ObjectSetInteger(0, rejectLine, OBJPROP_COLOR, Red);
+            ObjectSetInteger(0, rejectLine, OBJPROP_WIDTH, 2);
+            ObjectSetInteger(0, rejectLine, OBJPROP_STYLE, STYLE_DASH);
 
             AddAlert(rejectTime);
          }
-         break;
+         break; 
       }
    }
 }
@@ -200,7 +204,7 @@ void ClearPreviousBreakoutLines()
    for (int i = ObjectsTotal() - 1; i >= 0; i--)
    {
       string name = ObjectName(i);
-      if (StringFind(name, "PatternLine_") >= 0 || StringFind(name, "PatternLine_") >= 0)
+      if (StringFind(name, "BreakoutReject_") >= 0 || StringFind(name, "BreakoutReject_") >= 0)
          ObjectDelete(0, name);
    }
 }
