@@ -5,67 +5,129 @@
 
 datetime lastCheck = 0;
 input int RSI_Period = 14;
+datetime alerts[];
 
+input int    LookbackBars         = 50;   
+input int    MaxBreakoutScanBars  = 100;  
+
+input bool   EnableAlerts         = true;
+input color  BreakoutLineColor    = Lime; 
+input color  EngulfLineColor      = Black; 
+
+int onInit(){
+   ArrayResize(alerts, 0);
+   return(INIT_SUCCEEDED);
+}
 void OnTick()
 {
+    checkBreakouts();
    if (Time[1] == lastCheck) return;
    lastCheck = Time[1];
-
+  
    for (int i = 30; i >= 10; i--)
    {
-   checkBreakouts(i);
-      // Bearish Engulfing Detection with stricter logic
+   
+
       if (IsBearishEngulfing(i))
       {
          double engulfHigh = High[i];
 
-         // Look ahead 20 candles for invalidation (close above high)
+
          for (int j = i - 1; j >= i - 20 && j > 0; j--)
          {
             if (Close[j] > engulfHigh)
             {
+               if(!IsAlertSent(Time[j])){
                string name = "EngulfInvalid_" + TimeToStr(Time[j], TIME_SECONDS);
                DrawBlackLine(name, Time[j]);
                Alert("Bearish Engulfing Invalidated at ", Symbol(), " on ", TimeToStr(Time[j]));
+               AddAlert(Time[j]); 
                break;
+               }
             }
          }
       }
 
-      // Bullish Engulfing with RSI Divergence using stricter logic
+
       if (IsBullishEngulfing(i) && HasBullishRSIDivergence(i))
       {
+                        if(!IsAlertSent(Time[i])){
          string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
          DrawBlackLine(name, Time[i]);
          Alert("Bullish Engulfing with RSI Divergence at ", Symbol(), " on ", TimeToStr(Time[i]));
+                        AddAlert(Time[i]); 
+         }
       }
    }
 }
 
-
-void checkBreakouts(int i) {
-    int maxLookback = 120; 
-    int minLookback = 5;  
-    
-
-    for (int lookbackBars = minLookback; lookbackBars <= maxLookback; lookbackBars++) {
-        
-
-        double lowestLow = Low[i + 1];
-        for (int j = i + 1; j <= i + lookbackBars && j < Bars; j++) {
-            if (Low[j] < lowestLow)
-                lowestLow = Low[j];
-        }
-        
-
-        if (Low[i] < lowestLow && Close[i] > High[i + 1]) {
-            string name = "Breakout_" + TimeToStr(Time[i], TIME_SECONDS);
-            DrawBlackLine(name, Time[i]);
-            Alert("Breakout at ", Symbol(), " on ", TimeToStr(Time[i]));
-            break;
-        }
-    }
+bool IsAlertSent(datetime time)
+{
+   int size = ArraySize(alerts);
+   for (int i = 0; i < size; i++)
+   {
+      if (alerts[i] == time)
+         return true;
+   }
+   return false;
 }
+
+void AddAlert(datetime time)
+{
+   int size = ArraySize(alerts);
+   
+   if (size >= 1000)
+   {
+  
+      int newSize = size / 2;
+      for (int i = 0; i < newSize; i++)
+      {
+         alerts[i] = alerts[i + newSize];
+      }
+      ArrayResize(alerts, newSize);
+      size = newSize;
+   }
+   
+   ArrayResize(alerts, size + 1);
+   alerts[size] = time;
+}
+void checkBreakouts()
+{
+
+   for (int i = 1; i < Bars; i++)
+   {
+      if (i + 1 >= Bars) 
+         continue;
+
+      double priorSupport = Low[i + 1];
+      for (int j = i + 1; j < Bars; j++)
+      {
+         if (Low[j] < priorSupport)
+            priorSupport = Low[j];
+      }
+
+      if (Low[i] < priorSupport && Close[i - 1] > High[i])
+      {
+         datetime rejectTime = Time[i - 1];
+         if (!IsAlertSent(rejectTime))
+         {
+            string msg = "Breakout" + Symbol() + " at " + TimeToStr(rejectTime, TIME_DATE | TIME_MINUTES);
+            if (EnableAlerts)
+               Alert(msg);
+            Print(msg);
+
+            string lineName = "BreakoutSupport_" + TimeToStr(rejectTime, TIME_SECONDS);
+                DrawBlackLine(lineName, Time[i]);
+
+            AddAlert(rejectTime);
+         }
+         break;
+      }
+   }
+}
+   
+   
+   
 //-----------------------
 // Pattern Detection
 //-----------------------
