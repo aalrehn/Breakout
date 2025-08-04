@@ -98,13 +98,15 @@ void checkBreakouts()
    {
       if (i + 1 >= Bars) 
          continue;
-
+      
       double priorSupport = Low[i + 1];
       for (int j = i + 1; j < Bars; j++)
       {
          if (Low[j] < priorSupport)
             priorSupport = Low[j];
       }
+      // horizontal on close
+      
 
       if (Low[i] < priorSupport && Close[i - 1] > High[i])
       {
@@ -115,11 +117,14 @@ void checkBreakouts()
             if (EnableAlerts)
                Alert(msg);
             Print(msg);
+            ClearPreviousBreakoutLines();
             string lineName = "PatternLine_" + TimeToString(Time[i], TIME_MINUTES | TIME_SECONDS);
-            ObjectCreate(0, lineName, OBJ_HLINE, 0, 0, priorSupport);
-            ObjectSetInteger(0, lineName, OBJPROP_COLOR, LineColor);
+            ObjectCreate(0, lineName, OBJ_HLINE, 0, 0, Close[i-1]);
+            ObjectSetInteger(0, lineName, OBJPROP_COLOR, Red);
             ObjectSetInteger(0, lineName, OBJPROP_WIDTH, 2);
             ObjectSetInteger(0, lineName, OBJPROP_STYLE, STYLE_SOLID);
+            
+
 
             AddAlert(rejectTime);
          }
@@ -190,6 +195,15 @@ void DrawBlackLine(string name, datetime time)
       ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
    }
 }
+void ClearPreviousBreakoutLines()
+{
+   for (int i = ObjectsTotal() - 1; i >= 0; i--)
+   {
+      string name = ObjectName(i);
+      if (StringFind(name, "PatternLine_") >= 0 || StringFind(name, "PatternLine_") >= 0)
+         ObjectDelete(0, name);
+   }
+}
 
 
 void DeleteAllLines()
@@ -199,7 +213,8 @@ void DeleteAllLines()
    {
       string objName = ObjectName(i);
       if(StringFind(objName, "EngulfInvalid_") >= 0 || 
-         StringFind(objName, "BullishRSIEngulf_") >= 0)
+         StringFind(objName, "BullishRSIEngulf_") >= 0
+       )
       {
          ObjectDelete(0, objName);
       }
