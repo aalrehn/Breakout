@@ -19,6 +19,24 @@ int onInit(){
    ArrayResize(alerts, 0);
    return(INIT_SUCCEEDED);
 }
+
+string TimeframeToString()
+{
+   int tf = Period();
+   switch(tf)
+   {
+      case 1:     return "M1";
+      case 5:     return "M5";
+      case 15:    return "M15";
+      case 30:    return "M30";
+      case 60:    return "H1";
+      case 240:   return "H4";
+      case 1440:  return "D1";
+      case 10080: return "W1";
+      case 43200: return "MN1";
+      default:    return "M" + IntegerToString(tf);
+   }
+}
 void OnTick()
 {
     
@@ -38,12 +56,13 @@ void OnTick()
          {
             if (Close[j] > engulfHigh)
             {
-               if(!IsAlertSent(Time[j])){
+               if(!IsAlertSent(Time[i])){
+                           AddAlert(Time[i]); 
                string name = "EngulfInvalid_" + TimeToStr(Time[j], TIME_SECONDS);
                DrawBlackLine(name, Time[j]);
                Alert("Bearish Engulfing Invalidated at ", Symbol(), " on ", TimeToStr(Time[j]));
-                      SendNotification("Bearish Engulfing Invalidated at " +  Symbol() +  " on " +  TimeToStr(Time[j]));
-               AddAlert(Time[j]); 
+                     SendNotification("Bearish Engulfing Invalidated at " + Symbol() + " " + TimeframeToString() + " on " + TimeToStr(Time[i]));
+   
                break;
                }
             }
@@ -54,11 +73,12 @@ void OnTick()
       if (IsBullishEngulfing(i) && HasBullishRSIDivergence(i))
       {
                         if(!IsAlertSent(Time[i])){
+                        AddAlert(Time[i]); 
          string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
          DrawBlackLine(name, Time[i]);
          Alert("Bullish Engulfing with RSI Divergence at ", Symbol(), " on ", TimeToStr(Time[i]));
-            SendNotification("Bullish Engulfing with RSI Divergence at " +  Symbol() +  " on " +  TimeToStr(Time[i]));
-                        AddAlert(Time[i]); 
+           SendNotification("Bullish Engulfing with RSI Divergence at " + Symbol() + " " + TimeframeToString() + " on " + TimeToStr(Time[i]));
+                        
          }
       }
    }
@@ -132,7 +152,7 @@ void checkBreakouts()
             ObjectSetInteger(0, rejectLine, OBJPROP_WIDTH, 2);
             ObjectSetInteger(0, rejectLine, OBJPROP_STYLE, STYLE_DASH);
             
-            SendNotification(rejectLine);
+            SendNotification("Breakout " + Symbol() + " " + TimeframeToString() + " on " + TimeToStr(Time[i]));
 
             AddAlert(rejectTime);
          }
