@@ -246,12 +246,16 @@ void OnTick()
                   AddAlert(Time[i]); 
                   string name = "EngulfInvalid_" + TimeToStr(Time[j], TIME_SECONDS);
                   DrawBlackLine(name, Time[j]);
-
-                  string msg = "Bearish Engulfing INVALIDATED " + Symbol() + " " + TimeframeToString() +
-                               " at " + TimeToStr(Time[j]);
+                  datetime rejectTime = Time[i - 1];
+                               
+                                          string msg = "🚨 *Bearish Engulfing INVALIDATEDT* 🚨\n\n" +
+             "📊 *Symbol:*     " + Symbol() + "\n" +
+             "⏰ *Timeframe:*      " + TimeframeToString() + "\n" +
+             "📅 *Time:*    " + TimeToStr(rejectTime, TIME_DATE | TIME_MINUTES) + "\n\n" +
+             "🔔Trade responsibly, don't lose money. This trade could either break you or make you!";  ;
                   if (EnableAlerts) Alert(msg);
                   SendNotification(msg);
-                  NotifyText(msg);
+                 // NotifyText(msg);
                   NotifyScreenshot(msg);
    
                   break;
@@ -266,11 +270,17 @@ void OnTick()
             AddAlert(Time[i]); 
             string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
             DrawBlackLine(name, Time[i]);
-            string msg = "Bullish Engulfing + RSI Divergence " + Symbol() + " " + TimeframeToString() +
-                         " at " + TimeToStr(Time[i]);
+         //   string msg = "Bullish Engulfing + RSI Divergence " + Symbol() + " " + TimeframeToString() +
+           //              " at " + TimeToStr(Time[i]);
+                  datetime rejectTime = Time[i - 1];            
+             string msg = "🚨 *Bullish Engulfing + RSI DivergenceT* 🚨\n\n" +
+             "📊 *Symbol:*     " + Symbol() + "\n" +
+             "⏰ *Timeframe:*      " + TimeframeToString() + "\n" +
+             "📅 *Time:*    " + TimeToStr(rejectTime, TIME_DATE | TIME_MINUTES) + "\n\n" +
+             "🔔Trade responsibly, don't lose money. This trade could either break you or make you!";  ;
             if (EnableAlerts) Alert(msg);
             SendNotification(msg);
-            NotifyText(msg);
+           // NotifyText(msg);
             NotifyScreenshot(msg);
          }
       }
@@ -363,7 +373,7 @@ string msg = "🚨 *BREAKOUT ALERT* 🚨\n\n" +
             MarkCandleWithRectangle(breakdownMark, i, Red); 
             SendNotification("Breakout " + Symbol() + " " + TimeframeToString() + " on " + TimeToStr(Time[i]));
         //    NotifyText(msg);
-            NotifyScreenshot(msg);
+           // NotifyScreenshot(msg);
             AddAlert(rejectTime);
          }
          break; 
