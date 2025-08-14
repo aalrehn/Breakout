@@ -21,7 +21,7 @@ input bool   EnableAlerts         = true;
 input color  BreakoutLineColor    = Lime; 
 input color  EngulfLineColor      = Black; 
 input color LineColor = Lime;
-
+int count = 0;
 int OnInit(){
    ArrayResize(alerts, 0);
   // TestExistingScreenshot();
@@ -64,6 +64,7 @@ bool TgSendMessage(const string token,const string chatId,const string text)
 
 bool TakeShot(const string file="chart.png", const int w=1000, const int h=600)
 {
+
 
    if(MQLInfoInteger(MQL_TESTER)) {
       Print("Screenshots not available in Strategy Tester");
@@ -193,12 +194,14 @@ bool NotifyText(const string msg)
    return TgSendMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, msg);
 }
 
-bool NotifyScreenshot(const string caption="Snapshot", const string fname="chart.png", const int w=1000, const int h=600)
+bool NotifyScreenshot(const string caption="Snapshot", string fname="chart", const int w=1000, const int h=600)
 {
    if(!IncludeScreenshot) {
       Print("Screenshots disabled");
       return false;
    }
+   count+=1;
+   fname = fname+ count + ".png";
    
    if(!TakeShot(fname,w,h)) {
       Print("Screenshot failed");
@@ -255,6 +258,9 @@ void OnTick()
              "🔔Trade responsibly, don't lose money. This trade could either break you or make you!";  ;
                   if (EnableAlerts) Alert(msg);
                   SendNotification(msg);
+                  
+              string breakdownMark = "EngulfInvalid_" + TimeToStr(Time[i], TIME_SECONDS);
+            MarkCandleWithRectangle(breakdownMark, i, Red); 
                  // NotifyText(msg);
                   NotifyScreenshot(msg);
    
@@ -280,6 +286,9 @@ void OnTick()
              "🔔Trade responsibly, don't lose money. This trade could either break you or make you!";  ;
             if (EnableAlerts) Alert(msg);
             SendNotification(msg);
+            
+            string breakdownMark = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
+            MarkCandleWithRectangle(breakdownMark, i, Red); 
            // NotifyText(msg);
             NotifyScreenshot(msg);
          }
