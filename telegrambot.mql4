@@ -1,0 +1,456 @@
+//+------------------------------------------------------------------+
+//| Engulfing EA with RSI Divergence + Invalidation                  |
+//+------------------------------------------------------------------+
+#property strict
+
+input bool   SendToTelegram          = true;
+input string TELEGRAM_BOT_TOKEN      = "7818007302:AAEDJi2q2BYoGyg4XaD3dpYUicFK0-DEGQU";
+input string TELEGRAM_CHAT_ID        = "928109515";   
+input bool   IncludeScreenshot       = true;              
+input int    MinSecondsBetweenMsgs   = 3;  
+
+datetime lastCheck = 0;
+input int RSI_Period = 14;
+datetime alerts[];
+
+input int    LookbackBars         = 50;   
+input int    MaxBreakoutScanBars  = 100;  
+input int    MaxSupportLookback   = 50;  
+
+input bool   EnableAlerts         = true;
+input color  BreakoutLineColor    = Lime; 
+input color  EngulfLineColor      = Black; 
+input color LineColor = Lime;
+
+int OnInit(){
+   ArrayResize(alerts, 0);
+  // TestExistingScreenshot();
+   return(INIT_SUCCEEDED);
+}
+
+datetime __lastSendTime = 0;
+
+string UrlEncode(const string s)
+{
+   string o="";
+   for(int i=0;i<StringLen(s);i++)
+   {
+      ushort c = StringGetCharacter(s,i);
+      bool safe = ((c>='A'&&c<='Z')||(c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-'||c=='_'||c=='.'||c=='~');
+      if(safe) o += CharToString((char)c);
+      else     o += StringFormat("%%%02X", c);
+   }
+   return o;
+}
+
+bool CanSendNow(){ return (__lastSendTime==0) || (TimeCurrent()-__lastSendTime)>=MinSecondsBetweenMsgs; }
+void MarkSent(){ __lastSendTime = TimeCurrent(); }
+
+bool TgSendMessage(const string token,const string chatId,const string text)
+{
+   if(!SendToTelegram) return false;
+   if(!CanSendNow())  return false;
+
+   string url   = "https://api.telegram.org/bot"+token+"/sendMessage";
+   string body  = "chat_id="+chatId+"&text="+UrlEncode(text);
+   uchar data[]; StringToCharArray(body,data,0,WHOLE_ARRAY,CP_UTF8);
+   string headers = "Content-Type: application/x-www-form-urlencoded\r\n";
+
+   uchar result[]; string rh;
+   int code = WebRequest("POST", url, headers, 10000, data, result, rh);
+   if(code!=200){ Print("Telegram sendMessage failed HTTP=",code," hdr=",rh); return false; }
+   MarkSent(); return true;
+}
+
+bool TakeShot(const string file="chart.png", const int w=1000, const int h=600)
+{
+
+   if(MQLInfoInteger(MQL_TESTER)) {
+      Print("Screenshots not available in Strategy Tester");
+      return false;
+   }
+   
+
+   long chartId = ChartID();
+   bool ok = ChartScreenShot(chartId, file, w, h, ALIGN_RIGHT);
+   if(!ok) {
+      int error = GetLastError();
+      Print("ChartScreenShot failed. Error: ", error);
+      return false;
+   }
+   
+
+   Sleep(500);
+   
+
+   int fh = FileOpen(file, FILE_READ|FILE_BIN);
+   if(fh == INVALID_HANDLE) {
+      Print("Screenshot file not found: ", file);
+      return false;
+   }
+   int fileSize = (int)FileSize(fh);
+   FileClose(fh);
+   
+   if(fileSize < 100) {
+      Print("Screenshot file too small (", fileSize, " bytes) - likely failed");
+      return false;
+   }
+   
+   Print("Screenshot created successfully: ", file, " (", fileSize, " bytes)");
+   return true;
+}
+
+bool TgSendPhotoMultipart(const string token,const string chatId,const string fileName,const string caption="")
+{
+   if(!SendToTelegram) return false;
+   if(!CanSendNow())  return false;
+
+   int fh = FileOpen(fileName, FILE_READ|FILE_BIN);
+   if(fh==INVALID_HANDLE){ 
+      Print("FileOpen failed: ", fileName, ". File should be in MQL4\\Files\\"); 
+      return false; 
+   }
+   
+   int sz = (int)FileSize(fh);
+   if(sz <= 0) {
+      Print("Invalid file size: ", sz);
+      FileClose(fh);
+      return false;
+   }
+   
+   uchar fileBytes[]; 
+   ArrayResize(fileBytes, sz);
+   int bytesRead = FileReadArray(fh, fileBytes, 0, sz);
+   FileClose(fh);
+   
+   if(bytesRead != sz) {
+      Print("File read error. Expected: ", sz, " Read: ", bytesRead);
+      return false;
+   }
+
+   string boundary = "----WebKitFormBoundary" + IntegerToString(GetTickCount());
+   string headers = "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n";
+
+   // Build multipart form data correctly
+   string part1 = "--" + boundary + "\r\n" +
+                  "Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n" +
+                  chatId + "\r\n";
+   
+   string part2 = "--" + boundary + "\r\n" +
+                  "Content-Disposition: form-data; name=\"caption\"\r\n\r\n" +
+                  caption + "\r\n";
+   
+   string part3 = "--" + boundary + "\r\n" +
+                  "Content-Disposition: form-data; name=\"photo\"; filename=\"" + fileName + "\"\r\n" +
+                  "Content-Type: image/png\r\n\r\n";
+   
+   string part4 = "\r\n--" + boundary + "--\r\n";
+
+
+   uchar data1[], data2[], data3[], data4[];
+   StringToCharArray(part1, data1, 0, WHOLE_ARRAY, CP_UTF8);
+   StringToCharArray(part2, data2, 0, WHOLE_ARRAY, CP_UTF8);
+   StringToCharArray(part3, data3, 0, WHOLE_ARRAY, CP_UTF8);
+   StringToCharArray(part4, data4, 0, WHOLE_ARRAY, CP_UTF8);
+
+   int totalSize = (ArraySize(data1)-1) + (ArraySize(data2)-1) + (ArraySize(data3)-1) + 
+                   ArraySize(fileBytes) + (ArraySize(data4)-1);
+   
+
+   uchar payload[];
+   ArrayResize(payload, totalSize);
+   int pos = 0;
+   
+ 
+   ArrayCopy(payload, data1, pos, 0, ArraySize(data1)-1); pos += ArraySize(data1)-1;
+   ArrayCopy(payload, data2, pos, 0, ArraySize(data2)-1); pos += ArraySize(data2)-1;
+   ArrayCopy(payload, data3, pos, 0, ArraySize(data3)-1); pos += ArraySize(data3)-1;
+   ArrayCopy(payload, fileBytes, pos, 0, ArraySize(fileBytes)); pos += ArraySize(fileBytes);
+   ArrayCopy(payload, data4, pos, 0, ArraySize(data4)-1);
+
+   string url = "https://api.telegram.org/bot" + token + "/sendPhoto";
+   uchar result[]; 
+   string responseHeaders;
+   
+   Print("Sending photo. File size: ", sz, " bytes, Total payload: ", totalSize, " bytes");
+   
+   int code = WebRequest("POST", url, headers, 30000, payload, result, responseHeaders);
+   
+   if(code != 200){ 
+      Print("Telegram sendPhoto failed HTTP=", code);
+      string resultStr = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+      Print("Response: ", resultStr);
+      return false; 
+   }
+   
+   Print("Screenshot sent to Telegram successfully");
+   MarkSent(); 
+   return true;
+}
+
+bool NotifyText(const string msg)
+{
+   return TgSendMessage(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, msg);
+}
+
+bool NotifyScreenshot(const string caption="Snapshot", const string fname="chart.png", const int w=1000, const int h=600)
+{
+   if(!IncludeScreenshot) {
+      Print("Screenshots disabled");
+      return false;
+   }
+   
+   if(!TakeShot(fname,w,h)) {
+      Print("Screenshot failed");
+      return false;
+   }
+   bool result = TgSendPhotoMultipart(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, fname, caption);
+   return TgSendPhotoMultipart(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, fname, caption);
+}
+
+string TimeframeToString()
+{
+   int tf = Period();
+   switch(tf)
+   {
+      case 1:     return "M1";
+      case 5:     return "M5";
+      case 15:    return "M15";
+      case 30:    return "M30";
+      case 60:    return "H1";
+      case 240:   return "H4";
+      case 1440:  return "D1";
+      case 10080: return "W1";
+      case 43200: return "MN1";
+      default:    return "M" + IntegerToString(tf);
+   }
+}
+
+void OnTick()
+{
+   if (Time[1] == lastCheck) return;
+   lastCheck = Time[1];
+   checkBreakouts();
+   
+   for (int i = 30; i >= 10; i--)
+   {
+      if (IsBearishEngulfing(i))
+      {
+         double engulfHigh = High[i];
+
+         for (int j = i - 1; j >= i - 20 && j > 0; j--)
+         {
+            if (Close[j] > engulfHigh)
+            {
+               if(!IsAlertSent(Time[i])){
+                  AddAlert(Time[i]); 
+                  string name = "EngulfInvalid_" + TimeToStr(Time[j], TIME_SECONDS);
+                  DrawBlackLine(name, Time[j]);
+
+                  string msg = "Bearish Engulfing INVALIDATED " + Symbol() + " " + TimeframeToString() +
+                               " at " + TimeToStr(Time[j]);
+                  if (EnableAlerts) Alert(msg);
+                  SendNotification(msg);
+                  NotifyText(msg);
+                  NotifyScreenshot(msg);
+   
+                  break;
+               }
+            }
+         }
+      }
+
+      if (IsBullishEngulfing(i) && HasBullishRSIDivergence(i))
+      {
+         if(!IsAlertSent(Time[i])){
+            AddAlert(Time[i]); 
+            string name = "BullishRSIEngulf_" + TimeToStr(Time[i], TIME_SECONDS);
+            DrawBlackLine(name, Time[i]);
+            string msg = "Bullish Engulfing + RSI Divergence " + Symbol() + " " + TimeframeToString() +
+                         " at " + TimeToStr(Time[i]);
+            if (EnableAlerts) Alert(msg);
+            SendNotification(msg);
+            NotifyText(msg);
+            NotifyScreenshot(msg);
+         }
+      }
+   }
+}
+void MarkCandleWithRectangle(string name, int barIndex, color clr = Red)
+{
+   if (ObjectFind(0, name) >= 0) ObjectDelete(0, name);
+   
+   datetime startTime = Time[barIndex];
+   datetime endTime = Time[barIndex] + Period() * 60; // Add one period
+   
+   double high = High[barIndex];
+   double low = Low[barIndex];
+   
+   ObjectCreate(0, name, OBJ_RECTANGLE, 0, startTime, high, endTime, low);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_SOLID);
+   ObjectSetInteger(0, name, OBJPROP_FILL, false); // Outline only
+   ObjectSetInteger(0, name, OBJPROP_BACK, false); // Foreground
+}
+bool IsAlertSent(datetime time)
+{
+   int size = ArraySize(alerts);
+   for (int i = 0; i < size; i++)
+   {
+      if (alerts[i] == time)
+         return true;
+   }
+   return false;
+}
+
+void AddAlert(datetime time)
+{
+   int size = ArraySize(alerts);
+   
+   if (size >= 1000)
+   {
+      int newSize = size / 2;
+      for (int i = 0; i < newSize; i++)
+      {
+         alerts[i] = alerts[i + newSize];
+      }
+      ArrayResize(alerts, newSize);
+      size = newSize;
+   }
+   
+   ArrayResize(alerts, size + 1);
+   alerts[size] = time;
+}
+
+void checkBreakouts()
+{
+   for (int i = 2; i < Bars; i++)
+   {
+      if (i + 1 >= Bars)
+         continue;
+
+      int lastSupportBar = MathMin(i + MaxSupportLookback, Bars - 1);
+      double priorSupport = Low[i + 1];
+      for (int j = i + 1; j <= lastSupportBar; j++)
+      {
+         if (Low[j] < priorSupport)
+            priorSupport = Low[j];
+      }
+
+      if (Low[i] < priorSupport && Close[i - 1] > High[i])
+      {
+         datetime rejectTime = Time[i - 1];
+         if (!IsAlertSent(rejectTime))
+         {
+string msg = "🚨 *BREAKOUT ALERT* 🚨\n\n" +
+             "📊 *Symbol:*     " + Symbol() + "\n" +
+             "⏰ *Timeframe:*      " + TimeframeToString() + "\n" +
+             "📅 *Time:*    " + TimeToStr(rejectTime, TIME_DATE | TIME_MINUTES) + "\n\n" +
+             "🔔Trade responsibly, don't lose money. This trade could either break you or make you!";  ;
+            if (EnableAlerts)
+               Alert(msg);
+            Print(msg + " priorSupport=" + DoubleToStr(priorSupport, Digits));
+
+            ClearPreviousBreakoutLines();
+
+            string rejectLine = "BreakoutReject_" + TimeToStr(rejectTime, TIME_SECONDS);
+            ObjectCreate(0, rejectLine, OBJ_HLINE, 0, 0, Close[i - 1]);
+            ObjectSetInteger(0, rejectLine, OBJPROP_COLOR, Green);
+            ObjectSetInteger(0, rejectLine, OBJPROP_WIDTH, 2);
+            ObjectSetInteger(0, rejectLine, OBJPROP_STYLE, STYLE_DASH);
+             string breakdownMark = "BreakdownCandle_" + TimeToStr(Time[i], TIME_SECONDS);
+            MarkCandleWithRectangle(breakdownMark, i, Red); 
+            SendNotification("Breakout " + Symbol() + " " + TimeframeToString() + " on " + TimeToStr(Time[i]));
+        //    NotifyText(msg);
+            NotifyScreenshot(msg);
+            AddAlert(rejectTime);
+         }
+         break; 
+      }
+   }
+}
+
+//-----------------------
+// Pattern Detection
+//-----------------------
+
+bool IsBearishEngulfing(int i)
+{
+   if (i + 1 >= Bars) return false;
+
+   return (
+      Close[i] < Open[i] &&                       // current candle is bearish
+      Close[i + 1] > Open[i + 1] &&               // previous candle is bullish
+      High[i] >= High[i + 1] + Point * 2 &&       // high fully engulfs
+      Low[i] <= Low[i + 1] - Point * 2 &&         // low fully engulfs
+      Close[i] < Low[i + 1] - Point * 2           // closes below prior candle's low
+   );
+}
+
+bool IsBullishEngulfing(int i)
+{
+   if (i + 1 >= Bars) return false;
+
+   return (
+      Close[i] > Open[i] &&                       // current candle is bullish
+      Close[i + 1] < Open[i + 1] &&               // previous candle is bearish
+      Low[i] <= Low[i + 1] - Point * 2 &&         // low fully engulfs
+      High[i] >= High[i + 1] + Point * 2 &&       // high fully engulfs
+      Close[i] > High[i + 1] + Point * 2          // closes above prior candle's high
+   );
+}
+
+bool HasBullishRSIDivergence(int i)
+{
+   if (i + 5 >= Bars) return false;
+
+   double currentLow = Low[i];
+   double prevLow = Low[i + 5];
+
+   double rsiCurrent = iRSI(NULL, 0, RSI_Period, PRICE_CLOSE, i);
+   double rsiPrev = iRSI(NULL, 0, RSI_Period, PRICE_CLOSE, i + 5);
+
+   return (
+      currentLow < prevLow - Point * 2 &&   
+      rsiCurrent > rsiPrev + 0.1            
+   );
+}
+
+//-----------------------
+// Draw Helper
+//-----------------------
+
+void DrawBlackLine(string name, datetime time)
+{
+   DeleteAllLines();
+   if (ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_VLINE, 0, time, 0);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrBlack);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
+   }
+}
+
+void ClearPreviousBreakoutLines()
+{
+   for (int i = ObjectsTotal() - 1; i >= 0; i--)
+   {
+      string name = ObjectName(i);
+      if (StringFind(name, "BreakoutReject_") >= 0)
+         ObjectDelete(0, name);
+   }
+}
+
+void DeleteAllLines()
+{
+   for(int i = ObjectsTotal() - 1; i >= 0; i--)
+   {
+      string objName = ObjectName(i);
+      if(StringFind(objName, "EngulfInvalid_") >= 0 || 
+         StringFind(objName, "BullishRSIEngulf_") >= 0)
+      {
+         ObjectDelete(0, objName);
+      }
+   }
+}
